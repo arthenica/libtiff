@@ -1628,6 +1628,7 @@ static uint64_t PixarLogGetMaxCompressionRatio(TIFF *tif)
     /* security margin as I don't understand what this codec does */
     return MAX_DEFLATE_RATIO * (uint64_t)4;
 }
+
 int TIFFInitPixarLog(TIFF *tif, int scheme)
 {
     static const char module[] = "TIFFInitPixarLog";

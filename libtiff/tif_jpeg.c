@@ -2811,7 +2811,10 @@ static int JPEGInitializeLibJPEG(TIFF *tif, int decompress)
 
 static uint64_t JPEGGetMaxCompressionRatio(TIFF *tif)
 {
-    JPEGState *sp = JState(tif);
+    /* See README_for_libtiff_developpers.md for raw data used to estimate
+     * the maximum compression rate. */
+
+    const JPEGState *sp = JState(tif);
     if ((tif->tif_dir.td_photometric == PHOTOMETRIC_YCBCR) &&
         (tif->tif_dir.td_planarconfig == PLANARCONFIG_CONTIG) &&
         (tif->tif_dir.td_samplesperpixel == 3))
