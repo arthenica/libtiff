@@ -2816,6 +2816,33 @@ static int JPEGInitializeLibJPEG(TIFF *tif, int decompress)
     return 1;
 }
 
+static uint64_t JPEGGetMaxCompressionRatio(TIFF *tif)
+{
+    /* See README_for_libtiff_developpers.md for raw data used to estimate
+     * the maximum compression rate. */
+
+    const JPEGState *sp = JState(tif);
+    if ((tif->tif_dir.td_photometric == PHOTOMETRIC_YCBCR) &&
+        (tif->tif_dir.td_planarconfig == PLANARCONFIG_CONTIG) &&
+        (tif->tif_dir.td_samplesperpixel == 3))
+    {
+        if (sp->h_sampling == 2 && sp->v_sampling == 2)
+        {
+            if (tif->tif_dir.td_bitspersample == 12)
+                return 768;
+            else
+                return 512;
+        }
+
+        return 0; /* unknown */
+    }
+
+    if (tif->tif_dir.td_bitspersample == 12)
+        return 384;
+    else
+        return 256;
+}
+
 /* Common to tif_jpeg.c and tif_jpeg_12.c */
 static void TIFFInitJPEGCommon(TIFF *tif)
 {
@@ -2852,6 +2879,7 @@ static void TIFFInitJPEGCommon(TIFF *tif)
     tif->tif_encoderow = JPEGEncode;
     tif->tif_encodestrip = JPEGEncode;
     tif->tif_encodetile = JPEGEncode;
+    tif->tif_getmaxcompressionratio = JPEGGetMaxCompressionRatio;
     tif->tif_cleanup = JPEGCleanup;
 
     tif->tif_defstripsize = JPEGDefaultStripSize;
