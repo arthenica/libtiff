@@ -5906,7 +5906,7 @@ static void initDumpOptions(struct dump_opts *dump)
 static int safeAccumUInt32(uint32_t *acc, uint32_t delta, const char *func,
                            const char *what)
 {
-    if ((uint64_t)*acc + (uint64_t)delta > UINT32_MAX)
+    if (*acc > UINT32_MAX - delta)
     {
         TIFFError(func, "Combined %s exceeds UINT32_MAX", what);
         return -1;
