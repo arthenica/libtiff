@@ -895,6 +895,19 @@ static int PixarLogDecode(TIFF *tif, uint8_t *op, tmsize_t occ, uint16_t s)
         }
 
         /*
+         * The caller-provided output buffer size must represent a whole
+         * number of expanded ABGR scanlines.
+         */
+        if (occ % required)
+        {
+            TIFFErrorExtR(
+                tif, module,
+                "Fractional scanline not supported for PixarLog ABGR data");
+            memset(op, 0, (size_t)occ);
+            return (0);
+        }
+
+        /*
          * PixarLogDecode() may process multiple rows per call
          * (e.g. strip decoding). Limit nsamples so the total
          * output written by the loop below never exceeds occ.
@@ -902,16 +915,12 @@ static int PixarLogDecode(TIFF *tif, uint8_t *op, tmsize_t occ, uint16_t s)
         max_rows = occ / required;
         max_nsamples = max_rows * llen;
 
-        /*
-         * Truncate excess rows to preserve as much decoded data
-         * as possible while avoiding output buffer overflow.
-         */
         if (nsamples > max_nsamples)
         {
-            TIFFWarningExtR(tif, module,
-                            "PixarLog ABGR decode truncated to avoid "
-                            "output buffer overflow");
-            nsamples = max_nsamples;
+            TIFFErrorExtR(tif, module,
+                          "Output buffer too small for PixarLog ABGR data");
+            memset(op, 0, (size_t)occ);
+            return (0);
         }
     }
 
