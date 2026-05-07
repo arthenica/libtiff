@@ -880,12 +880,38 @@ static int PixarLogDecode(TIFF *tif, uint8_t *op, tmsize_t occ, uint16_t s)
     if (sp->user_datafmt == PIXARLOGDATAFMT_8BITABGR && sp->stride == 3)
     {
         tmsize_t required = (tmsize_t)td->td_imagewidth * 4;
+        tmsize_t max_rows;
+        tmsize_t max_nsamples;
+
+        /*
+         * Ensure at least one expanded output row fits.
+         */
         if (occ < required)
         {
             TIFFErrorExtR(tif, module,
                           "Output buffer too small for PixarLog ABGR data");
             memset(op, 0, (size_t)occ);
             return (0);
+        }
+
+        /*
+         * PixarLogDecode() may process multiple rows per call
+         * (e.g. strip decoding). Limit nsamples so the total
+         * output written by the loop below never exceeds occ.
+         */
+        max_rows = occ / required;
+        max_nsamples = max_rows * llen;
+
+        /*
+         * Truncate excess rows to preserve as much decoded data
+         * as possible while avoiding output buffer overflow.
+         */
+        if (nsamples > max_nsamples)
+        {
+            TIFFWarningExtR(tif, module,
+                            "PixarLog ABGR decode truncated to avoid "
+                            "output buffer overflow");
+            nsamples = max_nsamples;
         }
     }
 
