@@ -5012,7 +5012,8 @@ static int combineSeparateSamples32bits(uint8_t *in[], uint8_t *out,
 static int combineSeparateTileSamplesBytes(unsigned char *srcbuffs[],
                                            unsigned char *out, uint32_t cols,
                                            uint32_t rows, uint32_t imagewidth,
-                                           uint32_t tw, uint16_t spp, uint16_t bps)
+                                           uint32_t tw, uint16_t spp,
+                                           uint16_t bps)
 {
     int i, bytes_per_sample;
     uint32_t row, col, col_offset, src_rowsize, dst_rowsize, src_offset;
@@ -7423,7 +7424,14 @@ static int correct_orientation(struct image_data *image,
 } /* end correct_orientation */
 
 /* Extract multiple zones from an image and combine into a single composite
- * image */
+ * image.
+ *
+ * The caller must ensure that crop->combined_width and crop->combined_length
+ * have been computed from crop->regionlist[] before crop_buff is allocated.
+ * The copy loops below use crop->regionlist[] as the source of truth for the
+ * actual regions to extract. If the precomputed composite dimensions are out of
+ * sync with crop->regionlist[], crop_buff may be undersized.
+ */
 static int extractCompositeRegions(struct image_data *image,
                                    struct crop_mask *crop,
                                    unsigned char *read_buff,
@@ -7720,10 +7728,6 @@ static int extractCompositeRegions(struct image_data *image,
                 break;
         }
     }
-    if (crop->combined_width != composite_width)
-        TIFFError("combineSeparateRegions",
-                  "Combined width does not match composite width");
-
     return (0);
 } /* end extractCompositeRegions */
 
@@ -8710,6 +8714,85 @@ static int processCropSelections(struct image_data *image,
 
     if (crop->img_mode == COMPOSITE_IMAGES)
     {
+        uint32_t computed_width = 0;
+        uint32_t computed_length = 0;
+        uint64_t accum_width = 0;
+        uint64_t accum_length = 0;
+        /*
+         * Recompute composite dimensions from the actual crop regions before
+         * allocating crop_buff. crop->combined_width/combined_length may have
+         * been computed earlier from user supplied crop settings, but the copy
+         * loops in extractCompositeRegions() use crop->regionlist[] as the
+         * source of truth. If these values are out of sync, crop_buff may be
+         * allocated too small and the extraction routines may overflow it.
+         */
+        switch (crop->edge_ref)
+        {
+            default:
+            case EDGE_TOP:
+            case EDGE_BOTTOM:
+            {
+                uint32_t expected_width =
+                    crop->regionlist[0].x2 - crop->regionlist[0].x1 + 1;
+                for (i = 0; i < crop->selections; i++)
+                {
+                    uint32_t region_width =
+                        crop->regionlist[i].x2 - crop->regionlist[i].x1 + 1;
+                    uint32_t region_length =
+                        crop->regionlist[i].y2 - crop->regionlist[i].y1 + 1;
+                    if (region_width != expected_width)
+                    {
+                        TIFFError("processCropSelections",
+                                  "Only equal width regions can be combined "
+                                  "for -E top or bottom");
+                        return (-1);
+                    }
+                    accum_length += region_length;
+                    if (accum_length > UINT32_MAX)
+                    {
+                        TIFFError("processCropSelections",
+                                  "Composite length overflow");
+                        return (-1);
+                    }
+                }
+                computed_width = expected_width;
+                computed_length = (uint32_t)accum_length;
+                break;
+            }
+            case EDGE_LEFT:
+            case EDGE_RIGHT:
+            {
+                uint32_t expected_length =
+                    crop->regionlist[0].y2 - crop->regionlist[0].y1 + 1;
+                for (i = 0; i < crop->selections; i++)
+                {
+                    uint32_t region_width =
+                        crop->regionlist[i].x2 - crop->regionlist[i].x1 + 1;
+                    uint32_t region_length =
+                        crop->regionlist[i].y2 - crop->regionlist[i].y1 + 1;
+                    if (region_length != expected_length)
+                    {
+                        TIFFError("processCropSelections",
+                                  "Only equal length regions can be combined "
+                                  "for -E left or right");
+                        return (-1);
+                    }
+                    accum_width += region_width;
+                    if (accum_width > UINT32_MAX)
+                    {
+                        TIFFError("processCropSelections",
+                                  "Composite width overflow");
+                        return (-1);
+                    }
+                }
+                computed_width = (uint32_t)accum_width;
+                computed_length = expected_length;
+                break;
+            }
+        }
+        crop->combined_width = computed_width;
+        crop->combined_length = computed_length;
+
         uint64_t rowsize =
             ((uint64_t)crop->combined_width * image->bps * image->spp + 7) / 8;
 
