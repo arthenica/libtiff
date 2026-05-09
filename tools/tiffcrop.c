@@ -7723,8 +7723,8 @@ static int extractCompositeRegions(struct image_data *image,
                 }
                 prev_width += (crop_width * bps * count) / 8;
                 prev_trailing_bits += trailing_bits;
-                if (prev_trailing_bits > 7)
-                    prev_trailing_bits -= 8;
+                prev_width += prev_trailing_bits / 8;
+                prev_trailing_bits %= 8;
                 break;
         }
     }
