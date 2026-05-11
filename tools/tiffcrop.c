@@ -5012,7 +5012,8 @@ static int combineSeparateSamples32bits(uint8_t *in[], uint8_t *out,
 static int combineSeparateTileSamplesBytes(unsigned char *srcbuffs[],
                                            unsigned char *out, uint32_t cols,
                                            uint32_t rows, uint32_t imagewidth,
-                                           uint32_t tw, uint16_t spp, uint16_t bps)
+                                           uint32_t tw, uint16_t spp,
+                                           uint16_t bps)
 {
     int i, bytes_per_sample;
     uint32_t row, col, col_offset, src_rowsize, dst_rowsize, src_offset;
@@ -5897,6 +5898,23 @@ static void initDumpOptions(struct dump_opts *dump)
     dump->outfile = NULL;
 }
 
+/* Bounded uint32 accumulation helper used to guard zone/region dimensions
+ * that are summed across multiple selections (combined_width, combined_length,
+ * etc.). Returns 0 on success and -1 if the sum would exceed UINT32_MAX, in
+ * which case it emits a TIFFError citing 'func' and 'what' (e.g. "zone width").
+ */
+static int safeAccumUInt32(uint32_t *acc, uint32_t delta, const char *func,
+                           const char *what)
+{
+    if (*acc > UINT32_MAX - delta)
+    {
+        TIFFError(func, "Combined %s exceeds UINT32_MAX", what);
+        return -1;
+    }
+    *acc += delta;
+    return 0;
+}
+
 /* Compute pixel offsets into the image for margins and fixed regions */
 static int computeInputPixelOffsets(struct crop_mask *crop,
                                     struct image_data *image,
@@ -6408,7 +6426,11 @@ static int getCropOffsets(struct image_data *image, struct crop_mask *crop,
                 /* This is passed to extractCropZone or extractCompositeZones */
                 crop->combined_length = (uint32_t)zlength;
                 if (crop->exp_mode == COMPOSITE_IMAGES)
-                    crop->combined_width += (uint32_t)zwidth;
+                {
+                    if (safeAccumUInt32(&crop->combined_width, (uint32_t)zwidth,
+                                        "getCropOffsets", "zone width"))
+                        return -1;
+                }
                 else
                     crop->combined_width = (uint32_t)zwidth;
 
@@ -6466,7 +6488,12 @@ static int getCropOffsets(struct image_data *image, struct crop_mask *crop,
 
                 /* This is passed to extractCropZone or extractCompositeZones */
                 if (crop->exp_mode == COMPOSITE_IMAGES)
-                    crop->combined_length += (uint32_t)zlength;
+                {
+                    if (safeAccumUInt32(&crop->combined_length,
+                                        (uint32_t)zlength, "getCropOffsets",
+                                        "zone length"))
+                        return -1;
+                }
                 else
                     crop->combined_length = (uint32_t)zlength;
                 crop->combined_width = (uint32_t)zwidth;
@@ -6528,7 +6555,11 @@ static int getCropOffsets(struct image_data *image, struct crop_mask *crop,
                 /* This is passed to extractCropZone or extractCompositeZones */
                 crop->combined_length = (uint32_t)zlength;
                 if (crop->exp_mode == COMPOSITE_IMAGES)
-                    crop->combined_width += (uint32_t)zwidth;
+                {
+                    if (safeAccumUInt32(&crop->combined_width, (uint32_t)zwidth,
+                                        "getCropOffsets", "zone width"))
+                        return -1;
+                }
                 else
                     crop->combined_width = (uint32_t)zwidth;
 
@@ -6599,7 +6630,12 @@ static int getCropOffsets(struct image_data *image, struct crop_mask *crop,
 
                 /* This is passed to extractCropZone or extractCompositeZones */
                 if (crop->exp_mode == COMPOSITE_IMAGES)
-                    crop->combined_length += (uint32_t)zlength;
+                {
+                    if (safeAccumUInt32(&crop->combined_length,
+                                        (uint32_t)zlength, "getCropOffsets",
+                                        "zone length"))
+                        return -1;
+                }
                 else
                     crop->combined_length = (uint32_t)zlength;
                 crop->combined_width = (uint32_t)zwidth;
@@ -8297,9 +8333,22 @@ static int writeImageSections(TIFF *in, TIFF *out, struct image_data *image,
     {
         width = sections[i].x2 - sections[i].x1 + 1;
         length = sections[i].y2 - sections[i].y1 + 1;
-        sectsize =
-            (uint32_t)ceil((width * image->bps * image->spp + 7) / (double)8) *
-            length;
+        /* Use the same integer (n+7)/8 ceiling formula as loadImage:7209 to
+         * avoid an off-by-one overcount that previously came from
+         * ceil((n+7)/8.0). Then promote to uint64_t to detect overflow before
+         * the result is stored back into the uint32_t sectsize. */
+        {
+            uint64_t bpr64 =
+                ((uint64_t)width * image->bps * image->spp + 7) / 8;
+            uint64_t sectsize64 = bpr64 * length;
+            if (sectsize64 > (uint64_t)UINT32_MAX - NUM_BUFF_OVERSIZE_BYTES)
+            {
+                TIFFError("writeImageSections",
+                          "Section size exceeds UINT32_MAX");
+                return (-1);
+            }
+            sectsize = (uint32_t)sectsize64;
+        }
         /* allocate a buffer if we don't have one already */
         if (createImageSection(sectsize, sect_buff_ptr))
         {
