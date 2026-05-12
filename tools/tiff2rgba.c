@@ -207,6 +207,15 @@ static int cvt_by_tile(TIFF *in, TIFF *out)
      */
     rastersize =
         (uint32_t)((size_t)tile_width * tile_height * sizeof(uint32_t));
+    /*
+     * tile_height is used as a divisor in the overflow check below.
+     * Validate it before performing the reverse calculation.
+     */
+    if (tile_height == 0)
+    {
+        TIFFError(TIFFFileName(in), "Invalid zero tile length");
+        exit(EXIT_FAILURE);
+    }
     if (tile_width != (rastersize / tile_height) / sizeof(uint32_t))
     {
         TIFFError(TIFFFileName(in),
@@ -323,6 +332,15 @@ static int cvt_by_strip(TIFF *in, TIFF *out)
      * Allocate strip buffer
      */
     rastersize = (uint32_t)((size_t)width * rowsperstrip * sizeof(uint32_t));
+    /*
+     * rowsperstrip is used as a divisor in the overflow check below.
+     * Validate it before performing the reverse calculation.
+     */
+    if (rowsperstrip == 0)
+    {
+        TIFFError(TIFFFileName(in), "Invalid zero rows per strip");
+        exit(EXIT_FAILURE);
+    }
     if (width != (rastersize / rowsperstrip) / sizeof(uint32_t))
     {
         TIFFError(TIFFFileName(in),
