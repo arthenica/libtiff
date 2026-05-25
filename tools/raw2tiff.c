@@ -236,8 +236,7 @@ int main(int argc, char *argv[])
         return (EXIT_FAILURE);
     }
 
-    if ((depth <= 0) || (nbands == 0) ||
-        ((uint32_t)depth > (UINT_MAX / nbands)))
+    if ((depth <= 0) || ((uint32_t)depth > (UINT_MAX / nbands)))
     {
         fprintf(stderr, "Too large nbands value specified.\n");
         close(fd);

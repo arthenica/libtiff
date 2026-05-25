@@ -2447,7 +2447,8 @@ void process_command_opts(int argc, char *argv[], char *mp, char *mode,
                 }
                 if ((page->cols == 0) || (page->rows == 0))
                 {
-                    TIFFError("No subdivisions", "%u", 0U);
+                    TIFFError("Invalid subdivisions",
+                              "Rows and columns must be non-zero");
                     exit(EXIT_FAILURE);
                 }
 
@@ -8316,17 +8317,23 @@ static int writeImageSections(TIFF *in, TIFF *out, struct image_data *image,
     uint32_t i, k, width, length, sectsize;
     unsigned char *sect_buff = *sect_buff_ptr;
 
-    hres = page->hres;
-    vres = page->vres;
+    if ((page->cols == 0) || (page->rows == 0))
+    {
+        TIFFError("Invalid subdivisions", "Rows and columns must be non-zero");
+        return (-1);
+    }
 
-    if ((page->cols == 0) || (page->rows == 0) ||
-        (page->cols > (MAX_SECTIONS / page->rows)))
+    if (page->cols > (MAX_SECTIONS / page->rows))
     {
         TIFFError("writeImageSections",
                   "Rows and Columns exceed maximum sections\n"
                   "Increase resolution or reduce sections");
         return (-1);
     }
+
+    hres = page->hres;
+    vres = page->vres;
+
     k = page->cols * page->rows;
     if ((k < 1) || (k > MAX_SECTIONS))
     {
