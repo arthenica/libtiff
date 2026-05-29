@@ -2445,17 +2445,18 @@ void process_command_opts(int argc, char *argv[], char *mp, char *mode,
                     page->cols = (unsigned int)atoi(optarg);
                     page->rows = (unsigned int)atoi(optarg);
                 }
-                if ((page->cols * page->rows) > MAX_SECTIONS)
+                if ((page->cols == 0) || (page->rows == 0))
+                {
+                    TIFFError("Invalid subdivisions",
+                              "Rows and columns must be non-zero");
+                    exit(EXIT_FAILURE);
+                }
+
+                if (page->cols > (MAX_SECTIONS / page->rows))
                 {
                     TIFFError(
                         "Limit for subdivisions, ie rows x columns, exceeded",
                         "%d", MAX_SECTIONS);
-                    exit(EXIT_FAILURE);
-                }
-                if ((page->cols * page->rows) < 1)
-                {
-                    TIFFError("No subdivisions", "%u",
-                              (page->cols * page->rows));
                     exit(EXIT_FAILURE);
                 }
                 page->mode |= PAGE_MODE_ROWSCOLS;
@@ -8318,6 +8319,20 @@ static int writeImageSections(TIFF *in, TIFF *out, struct image_data *image,
     double hres, vres;
     uint32_t i, k, width, length, sectsize;
     unsigned char *sect_buff = *sect_buff_ptr;
+
+    if ((page->cols == 0) || (page->rows == 0))
+    {
+        TIFFError("Invalid subdivisions", "Rows and columns must be non-zero");
+        return (-1);
+    }
+
+    if (page->cols > (MAX_SECTIONS / page->rows))
+    {
+        TIFFError("writeImageSections",
+                  "Rows and Columns exceed maximum sections\n"
+                  "Increase resolution or reduce sections");
+        return (-1);
+    }
 
     hres = page->hres;
     vres = page->vres;
