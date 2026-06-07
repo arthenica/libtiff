@@ -1375,10 +1375,12 @@ static int OJPEGWriteHeaderInfo(TIFF *tif)
              * ylinelen * ylines, clinelen * clines, and their sum.
              */
             {
-                uint64_t ybuflen64 = (uint64_t)sp->subsampling_convert_ylinelen *
-                                     sp->subsampling_convert_ylines;
-                uint64_t cbuflen64 = (uint64_t)sp->subsampling_convert_clinelen *
-                                     sp->subsampling_convert_clines;
+                uint64_t ybuflen64 =
+                    (uint64_t)sp->subsampling_convert_ylinelen *
+                    sp->subsampling_convert_ylines;
+                uint64_t cbuflen64 =
+                    (uint64_t)sp->subsampling_convert_clinelen *
+                    sp->subsampling_convert_clines;
                 uint64_t ycbcrbuflen64 = ybuflen64 + 2 * cbuflen64;
                 if (ybuflen64 > UINT32_MAX || cbuflen64 > UINT32_MAX ||
                     ycbcrbuflen64 > UINT32_MAX)

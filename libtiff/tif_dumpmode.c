@@ -100,8 +100,7 @@ static int DumpModeDecode(TIFF *tif, uint8_t *buf, tmsize_t cc, uint16_t s)
 static int DumpModeSeek(TIFF *tif, uint32_t nrows)
 {
     tmsize_t seek_size;
-    if (nrows > 0 &&
-        tif->tif_dir.td_scanlinesize > TIFF_TMSIZE_T_MAX / nrows)
+    if (nrows > 0 && tif->tif_dir.td_scanlinesize > TIFF_TMSIZE_T_MAX / nrows)
     {
         TIFFErrorExtR(tif, "DumpModeSeek",
                       "Integer overflow computing seek size");
