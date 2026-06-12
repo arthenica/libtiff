@@ -37,6 +37,7 @@
 #include <unistd.h>
 #endif
 
+#include "tiff_tools.h"
 #include "tiffiop.h"
 
 #ifndef EXIT_SUCCESS
@@ -45,7 +46,6 @@
 #ifndef EXIT_FAILURE
 #define EXIT_FAILURE 1
 #endif
-
 static TIFFErrorHandler old_error_handler = 0;
 static int status = EXIT_SUCCESS; /* exit status */
 static int showdata = 0;          /* show data */
@@ -120,10 +120,8 @@ int main(int argc, char *argv[])
                 stoponerr = 0;
                 break;
             case 'M':
-                v = strtol(optarg, NULL, 0);
-                if (v < 0)
+                if (!TIFFToolsParseMemoryLimitMiB(optarg, &maxMalloc))
                     usage(EXIT_FAILURE);
-                maxMalloc = (tmsize_t)v << 20;
                 break;
             case 'o':
                 v = strtol(optarg, NULL, 0);
@@ -231,12 +229,18 @@ int main(int argc, char *argv[])
                     {
                         if (nCount > 0)
                         {
-                            subIFDoffsets =
-                                (uint64_t *)malloc(nCount * sizeof(uint64_t));
+                            tmsize_t subIFDoffsets_size = _TIFFMultiplySSize(
+                                tif, nCount, sizeof(uint64_t),
+                                "SubIFD offsets");
+                            if (subIFDoffsets_size == 0)
+                                break;
+                            subIFDoffsets = (uint64_t *)_TIFFCheckMalloc(
+                                tif, nCount, sizeof(uint64_t),
+                                "SubIFD offsets");
                             if (subIFDoffsets != NULL)
                             {
                                 memcpy(subIFDoffsets, vPtr,
-                                       nCount * sizeof(subIFDoffsets[0]));
+                                       (size_t)subIFDoffsets_size);
                                 printf("--- SubIFD image descriptor tag within "
                                        "TIFF directory %u with array of %d "
                                        "SubIFD chains ---\n",
@@ -261,7 +265,7 @@ int main(int argc, char *argv[])
                                     }
                                 }
                                 TIFFSetDirectory(tif, curdir);
-                                free(subIFDoffsets);
+                                _TIFFfree(subIFDoffsets);
                                 subIFDoffsets = NULL;
                             }
                             else
@@ -356,7 +360,11 @@ static void TIFFReadContigStripData(TIFF *tif)
         {
             uint32_t nrow = (row + rowsperstrip > h ? h - row : rowsperstrip);
             tstrip_t strip = TIFFComputeStrip(tif, row, 0);
-            if (TIFFReadEncodedStrip(tif, strip, buf, nrow * scanline) < 0)
+            tmsize_t readsize =
+                _TIFFMultiplySSize(tif, scanline, nrow, "strip read size");
+            if (readsize == 0)
+                break;
+            if (TIFFReadEncodedStrip(tif, strip, buf, readsize) < 0)
             {
                 if (stoponerr)
                     break;
@@ -404,7 +412,11 @@ static void TIFFReadSeparateStripData(TIFF *tif)
                 uint32_t nrow =
                     (row + rowsperstrip > h ? h - row : rowsperstrip);
                 tstrip_t strip = TIFFComputeStrip(tif, row, s);
-                if (TIFFReadEncodedStrip(tif, strip, buf, nrow * scanline) < 0)
+                tmsize_t readsize =
+                    _TIFFMultiplySSize(tif, scanline, nrow, "strip read size");
+                if (readsize == 0)
+                    break;
+                if (TIFFReadEncodedStrip(tif, strip, buf, readsize) < 0)
                 {
                     if (stoponerr)
                         break;
@@ -608,24 +620,28 @@ static void TIFFReadRawDataStriped(TIFF *tif, int bitrev)
     TIFFGetField(tif, TIFFTAG_STRIPBYTECOUNTS, &stripbc);
     if (stripbc != NULL && nstrips > 0)
     {
-        uint32_t bufsize = 0;
+        tmsize_t bufsize = 0;
         tdata_t buf = NULL;
         tstrip_t s;
 
         for (s = 0; s < nstrips; s++)
         {
-            if (stripbc[s] > bufsize || buf == NULL)
+            tmsize_t bytecount =
+                _TIFFCastUInt64ToSSize(tif, stripbc[s], "raw strip byte count");
+            if (bytecount == 0 && stripbc[s] != 0)
+                break;
+            if (bytecount > bufsize || buf == NULL)
             {
                 tdata_t newbuf;
-                if (maxMalloc != 0 && stripbc[s] > (uint64_t)maxMalloc)
+                if (maxMalloc != 0 && bytecount > maxMalloc)
                 {
                     fprintf(stderr,
                             "Memory allocation attempt %" TIFF_SSIZE_FORMAT
                             " over memory limit (%" TIFF_SSIZE_FORMAT ")\n",
-                            (tmsize_t)stripbc[s], maxMalloc);
+                            bytecount, maxMalloc);
                     break;
                 }
-                newbuf = _TIFFrealloc(buf, (tmsize_t)stripbc[s]);
+                newbuf = _TIFFrealloc(buf, bytecount);
                 if (newbuf == NULL)
                 {
                     fprintf(stderr,
@@ -634,10 +650,10 @@ static void TIFFReadRawDataStriped(TIFF *tif, int bitrev)
                             s);
                     break;
                 }
-                bufsize = (uint32_t)stripbc[s];
+                bufsize = bytecount;
                 buf = newbuf;
             }
-            if (TIFFReadRawStrip(tif, s, buf, (tmsize_t)stripbc[s]) < 0)
+            if (TIFFReadRawStrip(tif, s, buf, bytecount) < 0)
             {
                 fprintf(stderr, "Error reading strip %" PRIu32 "\n", s);
                 if (stoponerr)
@@ -647,15 +663,27 @@ static void TIFFReadRawDataStriped(TIFF *tif, int bitrev)
             {
                 if (bitrev)
                 {
-                    TIFFReverseBits((uint8_t *)buf, (tmsize_t)stripbc[s]);
+                    TIFFReverseBits((uint8_t *)buf, bytecount);
                     printf("%s %" PRIu32 ": (bit reversed)\n ", what, s);
                 }
                 else
                     printf("%s %" PRIu32 ":\n ", what, s);
                 if (showwords)
-                    ShowRawWords((uint16_t *)buf, (uint32_t)stripbc[s] >> 1);
+                {
+                    uint32_t wordcount = _TIFFCastUInt64ToUInt32(
+                        tif, (uint64_t)bytecount >> 1, "raw word count");
+                    if (wordcount == 0 && bytecount > 1)
+                        break;
+                    ShowRawWords((uint16_t *)buf, wordcount);
+                }
                 else
-                    ShowRawBytes((unsigned char *)buf, (uint32_t)stripbc[s]);
+                {
+                    uint32_t display_count = _TIFFCastUInt64ToUInt32(
+                        tif, (uint64_t)bytecount, "raw byte count");
+                    if (display_count == 0 && bytecount != 0)
+                        break;
+                    ShowRawBytes((unsigned char *)buf, display_count);
+                }
             }
         }
         if (buf != NULL)
@@ -672,24 +700,28 @@ static void TIFFReadRawDataTiled(TIFF *tif, int bitrev)
     TIFFGetField(tif, TIFFTAG_TILEBYTECOUNTS, &tilebc);
     if (tilebc != NULL && ntiles > 0)
     {
-        uint64_t bufsize = 0;
+        tmsize_t bufsize = 0;
         tdata_t buf = NULL;
         uint32_t t;
 
         for (t = 0; t < ntiles; t++)
         {
-            if (tilebc[t] > bufsize || buf == NULL)
+            tmsize_t bytecount =
+                _TIFFCastUInt64ToSSize(tif, tilebc[t], "raw tile byte count");
+            if (bytecount == 0 && tilebc[t] != 0)
+                break;
+            if (bytecount > bufsize || buf == NULL)
             {
                 tdata_t newbuf;
-                if (maxMalloc != 0 && tilebc[t] > (uint64_t)maxMalloc)
+                if (maxMalloc != 0 && bytecount > maxMalloc)
                 {
                     fprintf(stderr,
                             "Memory allocation attempt %" TIFF_SSIZE_FORMAT
                             " over memory limit (%" TIFF_SSIZE_FORMAT ")\n",
-                            (tmsize_t)tilebc[t], maxMalloc);
+                            bytecount, maxMalloc);
                     break;
                 }
-                newbuf = _TIFFrealloc(buf, (tmsize_t)tilebc[t]);
+                newbuf = _TIFFrealloc(buf, bytecount);
                 if (newbuf == NULL)
                 {
                     fprintf(stderr,
@@ -697,10 +729,10 @@ static void TIFFReadRawDataTiled(TIFF *tif, int bitrev)
                             t);
                     break;
                 }
-                bufsize = (uint32_t)tilebc[t];
+                bufsize = bytecount;
                 buf = newbuf;
             }
-            if (TIFFReadRawTile(tif, t, buf, (tmsize_t)tilebc[t]) < 0)
+            if (TIFFReadRawTile(tif, t, buf, bytecount) < 0)
             {
                 fprintf(stderr, "Error reading tile %" PRIu32 "\n", t);
                 if (stoponerr)
@@ -710,7 +742,7 @@ static void TIFFReadRawDataTiled(TIFF *tif, int bitrev)
             {
                 if (bitrev)
                 {
-                    TIFFReverseBits((uint8_t *)buf, (tmsize_t)tilebc[t]);
+                    TIFFReverseBits((uint8_t *)buf, bytecount);
                     printf("%s %" PRIu32 ": (bit reversed)\n ", what, t);
                 }
                 else
@@ -719,11 +751,19 @@ static void TIFFReadRawDataTiled(TIFF *tif, int bitrev)
                 }
                 if (showwords)
                 {
-                    ShowRawWords((uint16_t *)buf, (uint32_t)(tilebc[t] >> 1));
+                    uint32_t wordcount = _TIFFCastUInt64ToUInt32(
+                        tif, (uint64_t)bytecount >> 1, "raw word count");
+                    if (wordcount == 0 && bytecount > 1)
+                        break;
+                    ShowRawWords((uint16_t *)buf, wordcount);
                 }
                 else
                 {
-                    ShowRawBytes((unsigned char *)buf, (uint32_t)tilebc[t]);
+                    uint32_t display_count = _TIFFCastUInt64ToUInt32(
+                        tif, (uint64_t)bytecount, "raw byte count");
+                    if (display_count == 0 && bytecount != 0)
+                        break;
+                    ShowRawBytes((unsigned char *)buf, display_count);
                 }
             }
         }
