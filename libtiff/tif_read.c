@@ -127,6 +127,9 @@ static int TIFFReadAndRealloc(TIFF *tif, tmsize_t size, tmsize_t rawdata_offset,
 
         bytes_read = TIFFReadFile(
             tif, tif->tif_rawdata + rawdata_offset + already_read, to_read);
+        if (bytes_read < 0)
+            /* Treat read errors as short reads before updating offsets. */
+            bytes_read = 0;
         already_read += bytes_read;
         if (bytes_read != to_read)
         {
