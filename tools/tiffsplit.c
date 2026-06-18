@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "tiff_tools.h"
 #include "tiffio.h"
 
 #ifndef EXIT_SUCCESS
@@ -115,25 +116,14 @@ int main(int argc, char *argv[])
     extern int optind;
 #endif
     int c;
-    long v;
 
     while ((c = getopt(argc, argv, "M:")) != -1)
     {
         switch (c)
         {
             case 'M':
-                v = strtol(optarg, NULL, 0);
-                if (v < 0)
+                if (!TIFFToolsParseMemoryLimitMiB(optarg, &maxMalloc))
                     usage(EXIT_FAILURE);
-                maxMalloc = (tmsize_t)v << 20;
-                if ((maxMalloc == 0) && (optarg[0] != '0'))
-                {
-                    fprintf(stderr,
-                            "tiffsplit: Error: Option -M was not followed by a "
-                            "number but <%s>\n",
-                            optarg);
-                    usage(EXIT_FAILURE);
-                }
                 break;
             case '?':
                 usage(EXIT_SUCCESS);

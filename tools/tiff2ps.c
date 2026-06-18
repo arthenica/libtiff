@@ -24,6 +24,7 @@
 
 #include "libport.h"
 #include "tif_config.h"
+#include "tiff_tools.h"
 #include "tiffiop.h"
 
 #include <math.h>
@@ -288,7 +289,6 @@ int main(int argc, char *argv[])
     extern int optind;
 #endif
     FILE *output = stdout;
-    long v;
 
     pageOrientation[0] = '\0';
 
@@ -298,10 +298,8 @@ int main(int argc, char *argv[])
         switch (c)
         {
             case 'M':
-                v = strtol(optarg, NULL, 0);
-                if (v < 0)
+                if (!TIFFToolsParseMemoryLimitMiB(optarg, &maxMalloc))
                     usage(EXIT_FAILURE);
-                maxMalloc = (tmsize_t)v << 20;
                 break;
             case 'b':
                 bottommargin = atof(optarg);
@@ -2623,6 +2621,7 @@ static int PS_Lvl2page(FILE *fd, TIFF *tif, uint32_t w, uint32_t h)
 #if defined(EXP_ASCII85ENCODER)
     if (ascii85_g)
     {
+        tmsize_t ascii85_size;
         /*
          * Allocate a buffer to hold the ASCII85 encoded data.  Note
          * that it is allocated with sufficient room to hold the
@@ -2632,7 +2631,22 @@ static int PS_Lvl2page(FILE *fd, TIFF *tif, uint32_t w, uint32_t h)
          * 5*chunk_size/4.
          */
 
-        ascii85_p = (uint8_t *)limitMalloc((chunk_size + (chunk_size / 2)) + 8);
+        ascii85_size =
+            _TIFFAddSSize(tif, chunk_size, chunk_size / 2, "ASCII85 buffer");
+        if (ascii85_size == 0 && chunk_size != 0)
+        {
+            _TIFFfree(buf_data);
+            TIFFError(filename, "Cannot allocate ASCII85 encoding buffer.");
+            return (FALSE);
+        }
+        ascii85_size = _TIFFAddSSize(tif, ascii85_size, 8, "ASCII85 buffer");
+        if (ascii85_size == 0)
+        {
+            _TIFFfree(buf_data);
+            TIFFError(filename, "Cannot allocate ASCII85 encoding buffer.");
+            return (FALSE);
+        }
+        ascii85_p = (uint8_t *)limitMalloc(ascii85_size);
 
         if (!ascii85_p)
         {
@@ -2785,8 +2799,27 @@ void PSpage(FILE *fd, TIFF *tif, uint32_t w, uint32_t h)
 
     if ((level2 || level3) && PS_Lvl2page(fd, tif, w, h))
         return;
-    ps_bytesperrow =
-        tf_bytesperrow - (uint32_t)extrasamples * bitspersample / 8 * w;
+    {
+        uint64_t extra_sample_bits =
+            _TIFFMultiply64(tif, extrasamples, bitspersample, "PS row size");
+        uint64_t extra_sample_bytes = extra_sample_bits / 8;
+        uint64_t extra_row_bytes =
+            _TIFFMultiply64(tif, extra_sample_bytes, w, "PS row size");
+        tmsize_t extra_row_size =
+            _TIFFCastUInt64ToSSize(tif, extra_row_bytes, "PS row size");
+        if ((extra_sample_bits == 0 && extrasamples != 0 &&
+             bitspersample != 0) ||
+            (extra_row_bytes == 0 && extra_sample_bytes != 0 && w != 0) ||
+            (extra_row_size == 0 && extra_row_bytes != 0) ||
+            extra_row_size > tf_bytesperrow)
+        {
+            TIFFError(
+                TIFFFileName(tif),
+                "Integer overflow detected while calculating PS row size");
+            return;
+        }
+        ps_bytesperrow = tf_bytesperrow - extra_row_size;
+    }
     switch (photometric)
     {
         case PHOTOMETRIC_RGB:
@@ -2818,8 +2851,19 @@ void PSpage(FILE *fd, TIFF *tif, uint32_t w, uint32_t h)
         case PHOTOMETRIC_PALETTE:
             fprintf(fd, "%s", RGBcolorimage);
             PhotoshopBanner(fd, w, h, 1, 3, "false 3 colorimage");
-            fprintf(fd, "/scanLine %" TIFF_SSIZE_FORMAT " string def\n",
-                    ps_bytesperrow * 3);
+            {
+                tmsize_t palette_row_size = _TIFFMultiplySSize(
+                    tif, ps_bytesperrow, 3, "palette row size");
+                if (palette_row_size == 0 && ps_bytesperrow != 0)
+                {
+                    TIFFError(TIFFFileName(tif),
+                              "Integer overflow detected while calculating "
+                              "palette row size");
+                    return;
+                }
+                fprintf(fd, "/scanLine %" TIFF_SSIZE_FORMAT " string def\n",
+                        palette_row_size);
+            }
             fprintf(fd, "%" PRIu32 " %" PRIu32 " 8\n", w, h);
             fprintf(fd, "[%" PRIu32 " 0 0 -%" PRIu32 " 0 %" PRIu32 "]\n", w, h,
                     h);
@@ -3147,6 +3191,7 @@ void PSDataBW(FILE *fd, TIFF *tif, uint32_t w, uint32_t h)
 #if defined(EXP_ASCII85ENCODER)
     if (ascii85_g)
     {
+        tmsize_t ascii85_size;
         /*
          * Allocate a buffer to hold the ASCII85 encoded data.  Note
          * that it is allocated with sufficient room to hold the
@@ -3156,7 +3201,22 @@ void PSDataBW(FILE *fd, TIFF *tif, uint32_t w, uint32_t h)
          * 5*stripsize/4.
          */
 
-        ascii85_p = (uint8_t *)limitMalloc((stripsize + (stripsize / 2)) + 8);
+        ascii85_size =
+            _TIFFAddSSize(tif, stripsize, stripsize / 2, "ASCII85 buffer");
+        if (ascii85_size == 0 && stripsize != 0)
+        {
+            _TIFFfree(tf_buf);
+            TIFFError(filename, "Cannot allocate ASCII85 encoding buffer.");
+            return;
+        }
+        ascii85_size = _TIFFAddSSize(tif, ascii85_size, 8, "ASCII85 buffer");
+        if (ascii85_size == 0)
+        {
+            _TIFFfree(tf_buf);
+            TIFFError(filename, "Cannot allocate ASCII85 encoding buffer.");
+            return;
+        }
+        ascii85_p = (uint8_t *)limitMalloc(ascii85_size);
 
         if (!ascii85_p)
         {
@@ -3270,7 +3330,8 @@ void PSDataBW(FILE *fd, TIFF *tif, uint32_t w, uint32_t h)
 void PSRawDataBW(FILE *fd, TIFF *tif, uint32_t w, uint32_t h)
 {
     uint64_t *bc;
-    uint32_t bufsize;
+    uint64_t max_bytecount;
+    tmsize_t bufsize;
     int breaklen = MAXLINE;
     tmsize_t cc;
     uint16_t fillorder;
@@ -3296,13 +3357,16 @@ void PSRawDataBW(FILE *fd, TIFF *tif, uint32_t w, uint32_t h)
      * Find largest strip:
      */
 
-    bufsize = (uint32_t)bc[0];
+    max_bytecount = bc[0];
 
     for (s = 0; ++s < tf_numberstrips;)
     {
-        if (bc[s] > bufsize)
-            bufsize = (uint32_t)bc[s];
+        if (bc[s] > max_bytecount)
+            max_bytecount = bc[s];
     }
+    bufsize = _TIFFCastUInt64ToSSize(tif, max_bytecount, "PSRawDataBW");
+    if (bufsize == 0 && max_bytecount != 0)
+        return;
 
     tf_buf = (unsigned char *)limitMalloc(bufsize);
     if (tf_buf == NULL)
@@ -3314,6 +3378,7 @@ void PSRawDataBW(FILE *fd, TIFF *tif, uint32_t w, uint32_t h)
 #if defined(EXP_ASCII85ENCODER)
     if (ascii85_g)
     {
+        tmsize_t ascii85_size;
         /*
          * Allocate a buffer to hold the ASCII85 encoded data.  Note
          * that it is allocated with sufficient room to hold the
@@ -3323,7 +3388,22 @@ void PSRawDataBW(FILE *fd, TIFF *tif, uint32_t w, uint32_t h)
          * 5*bufsize/4.
          */
 
-        ascii85_p = (uint8_t *)limitMalloc((bufsize + (bufsize / 2)) + 8);
+        ascii85_size =
+            _TIFFAddSSize(tif, bufsize, bufsize / 2, "ASCII85 buffer");
+        if (ascii85_size == 0 && bufsize != 0)
+        {
+            _TIFFfree(tf_buf);
+            TIFFError(filename, "Cannot allocate ASCII85 encoding buffer.");
+            return;
+        }
+        ascii85_size = _TIFFAddSSize(tif, ascii85_size, 8, "ASCII85 buffer");
+        if (ascii85_size == 0)
+        {
+            _TIFFfree(tf_buf);
+            TIFFError(filename, "Cannot allocate ASCII85 encoding buffer.");
+            return;
+        }
+        ascii85_p = (uint8_t *)limitMalloc(ascii85_size);
 
         if (!ascii85_p)
         {

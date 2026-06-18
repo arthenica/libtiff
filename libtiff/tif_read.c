@@ -340,8 +340,16 @@ static int TIFFSeek(TIFF *tif, uint32_t row, uint16_t sample)
                       td->td_imagelength);
         return (0);
     }
+    if (td->td_rowsperstrip == 0)
+    {
+        TIFFErrorExtR(tif, tif->tif_name,
+                      "Cannot compute strip: RowsPerStrip is zero");
+        return (0);
+    }
     if (td->td_planarconfig == PLANARCONFIG_SEPARATE)
     {
+        uint64_t sample_offset;
+        uint64_t strip64;
         if (sample >= td->td_samplesperpixel)
         {
             TIFFErrorExtR(tif, tif->tif_name,
@@ -349,8 +357,18 @@ static int TIFFSeek(TIFF *tif, uint32_t row, uint16_t sample)
                           sample, td->td_samplesperpixel);
             return (0);
         }
-        strip = (uint32_t)sample * td->td_stripsperimage +
-                row / td->td_rowsperstrip;
+        sample_offset =
+            _TIFFMultiply64(tif, sample, td->td_stripsperimage, "TIFFSeek");
+        if (sample_offset == 0 && sample != 0 && td->td_stripsperimage != 0)
+            return (0);
+        strip64 = _TIFFAdd64(tif, sample_offset, row / td->td_rowsperstrip,
+                             "TIFFSeek");
+        if (strip64 == 0 &&
+            (sample_offset != 0 || (row / td->td_rowsperstrip) != 0))
+            return (0);
+        strip = _TIFFCastUInt64ToUInt32(tif, strip64, "TIFFSeek");
+        if (strip == 0 && strip64 != 0)
+            return (0);
     }
     else
         strip = row / td->td_rowsperstrip;
