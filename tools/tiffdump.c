@@ -320,7 +320,7 @@ static uint64_t ReadDirectory(int fd, unsigned int ix, uint64_t off)
     void *dirmem = NULL;
     uint64_t nextdiroff = 0;
     uint32_t n;
-    ssize_t nread;
+    tmsize_t nread;
     tmsize_t dirsize;
     uint8_t *dp;
 
@@ -381,8 +381,8 @@ static uint64_t ReadDirectory(int fd, unsigned int ix, uint64_t off)
         goto done;
     }
 
-    nread = read(fd, (char *)dirmem, (size_t)dirsize);
-    if (nread < 0 || (tmsize_t)nread != dirsize)
+    nread = (tmsize_t)read(fd, (char *)dirmem, (uint32_t)dirsize);
+    if (nread < 0 || nread != dirsize)
     {
         if (nread <= 0)
             n = 0;

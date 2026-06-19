@@ -362,7 +362,7 @@ struct TIFFOpenOptions
 */
 #if defined(HAVE_FSEEKO)
 #define fseek(stream, offset, whence) fseeko(stream, offset, whence)
-#define ftell(stream, offset, whence) ftello(stream, offset, whence)
+#define ftell(stream) ftello(stream)
 #endif
 #endif
 #if defined(_WIN32) &&                                                         \
