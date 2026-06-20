@@ -1,3 +1,7 @@
+2026-06-20  Even Rouault  <even.rouault@spatialys.com>
+
+    libtiff 4.7.2 release
+
 2026-06-19  Even Rouault  <even.rouault@spatialys.com>
 
 	Merge branch 'add_missing_export_symbols' into 'master'
