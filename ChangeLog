@@ -1,6 +1,34 @@
-2026-06-23  Even Rouault  <even.rouault@spatialys.com>
+2026-06-26  Even Rouault  <even.rouault@spatialys.com>
 
-    libtiff 4.7.2 release
+	libtiff 4.7.2 release
+
+2026-06-25  Even Rouault  <even.rouault@spatialys.com>
+
+	Merge branch 'fix_859' into 'master'
+	Revert "OJPEG: fix nullptr deref when changing compression method from OJPEG to something else"
+
+	Closes #795
+
+	See merge request libtiff/libtiff!910
+
+2026-06-25  Even Rouault  <even.rouault@spatialys.com>
+
+	Merge branch 'tif_jbig-benign_errors' into 'master'
+	tif_jbig.c don't discard validly decoded data if errors occur
+
+	See merge request libtiff/libtiff!810
+
+2026-06-25  Lee Howard  <faxguy@howardsilvan.com>
+
+	tif_jbig.c don't discard validly decoded data if errors occur.
+
+2026-06-25  Even Rouault  <even.rouault@spatialys.com>
+
+	_TIFFSetDefaultCompressionState(): reset postdecode callback.
+	Fixes #795
+
+	Revert "OJPEG: fix nullptr deref when changing compression method from OJPEG to something else"
+	This reverts commit 04607e3ce091ac0579317f185ab2cc378c3f6d39.
 
 2026-06-19  Even Rouault  <even.rouault@spatialys.com>
 
