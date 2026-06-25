@@ -99,9 +99,6 @@ static int JBIGDecode(TIFF *tif, uint8_t *buffer, tmsize_t size, uint16_t s)
                       jbg_strerror(decodeStatus)
 #endif
         );
-        memset(buffer, 0, (size_t)size);
-        jbg_dec_free(&decoder);
-        return 0;
     }
 
     decodedSize = jbg_dec_getsize(&decoder);
@@ -123,7 +120,8 @@ static int JBIGDecode(TIFF *tif, uint8_t *buffer, tmsize_t size, uint16_t s)
         return 0;
     }
     pImage = jbg_dec_getimage(&decoder, 0);
-    _TIFFmemcpy(buffer, pImage, (tmsize_t)decodedSize);
+    if (pImage != NULL)
+        _TIFFmemcpy(buffer, pImage, (tmsize_t)decodedSize);
     jbg_dec_free(&decoder);
 
     tif->tif_rawcp += tif->tif_rawcc;
