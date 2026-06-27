@@ -216,7 +216,7 @@ Bug fixes:
 
 * tiffcrop: fix undefined behaviour (:issue:`790`)
 
-* tiffcrop: avoid dangling pointer in loadImage by clearing *read_ptr after free (:issue:`751`)
+* tiffcrop: avoid dangling pointer in loadImage by clearing \*read_ptr after free (:issue:`751`)
 
 * tiffcrop: fix undefined behaviour in reverseSamples32bits() (:issue:`752`)
 
