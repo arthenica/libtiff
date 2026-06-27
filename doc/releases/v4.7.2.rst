@@ -148,9 +148,6 @@ Bug fixes:
 
 * OJPEG: fix integer overflow in subsampling buffer allocation.
 
-* OJPEG: fix nullptr deref when changing compression method from OJPEG to
-  something else (:issue:`795`).
-
 * OJPEG  fix potential integer overflow/out-of-bounds access (:issue:`796`).
 
 * ojpeg: prevent EOF infinite loop (fixes commit 2a3d55b)
