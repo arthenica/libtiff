@@ -1,6 +1,47 @@
-2026-06-26  Even Rouault  <even.rouault@spatialys.com>
+2026-06-27  Even Rouault  <even.rouault@spatialys.com>
 
 	libtiff 4.7.2 release
+
+2026-06-27  Even Rouault  <even.rouault@spatialys.com>
+
+	Merge branch 'revert_mr_910' into 'master'
+	Revert "_TIFFSetDefaultCompressionState(): reset postdecode callback"
+
+	Closes #860
+
+	See merge request libtiff/libtiff!915
+
+2026-06-27  Even Rouault  <even.rouault@spatialys.com>
+
+	Merge branch 'mr_810_revert' into 'master'
+	Revert "tif_jbig.c don't discard validly decoded data if errors occur"
+
+	See merge request libtiff/libtiff!914
+
+2026-06-27  Even Rouault  <even.rouault@spatialys.com>
+
+	Merge branch 'rst_formatting_fix' into 'master'
+	v4.7.2.rst: formatting fix
+
+	See merge request libtiff/libtiff!913
+
+2026-06-27  Even Rouault  <even.rouault@spatialys.com>
+
+	Revert "_TIFFSetDefaultCompressionState(): reset postdecode callback"
+	This reverts commit b7a73279cc83e39a2d3425d69185281009f7554a.
+
+	Fixes #860, but re-opens #795
+
+2026-06-27  Even Rouault  <even.rouault@spatialys.com>
+
+	Revert "tif_jbig.c don't discard validly decoded data if errors occur"
+	This reverts commit fd4e85614c479b9cac7b4d961648cac6f15ad81f.
+
+	This causes a null-ptr deref in jbigkit on some corrupted images. See https://gitlab.com/libtiff/libtiff/-/merge_requests/810#note_3500232812
+
+2026-06-27  Even Rouault  <even.rouault@spatialys.com>
+
+	v4.7.2.rst: formatting fix.
 
 2026-06-25  Even Rouault  <even.rouault@spatialys.com>
 
