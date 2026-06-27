@@ -155,8 +155,6 @@ Bug fixes:
 
 * ojpeg: prevent EOF infinite loop (fixes commit 2a3d55b)
 
-* tif_jbig.c don't discard validly decoded data if errors occur
-
 * fix null pointer deference in :issue:`782`.
 
 * fix stack-overflow in :issue:`784`.
